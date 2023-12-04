@@ -1,5 +1,11 @@
 package main
 
+import (
+	"fmt"
+	"reflect"
+	"time"
+)
+
 /*
 === Or channel ===
 
@@ -33,6 +39,44 @@ start := time.Now()
 fmt.Printf(“fone after %v”, time.Since(start))
 */
 
-func main() {
+func or(channels ...<-chan interface{}) <-chan interface{} {
+	mergedChannel := make(chan interface{})
 
+	go func() {
+		defer close(mergedChannel)
+
+		cases := make([]reflect.SelectCase, len(channels))
+		for i, ch := range channels {
+			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+		}
+
+		_, _, ok := reflect.Select(cases)
+		if !ok {
+			return
+		}
+	}()
+
+	return mergedChannel
+}
+
+func main() {
+	sig := func(after time.Duration) <-chan interface{} {
+		c := make(chan interface{})
+		go func() {
+			defer close(c)
+			time.Sleep(after)
+		}()
+		return c
+	}
+
+	start := time.Now()
+	<-or(
+		sig(2*time.Hour),
+		sig(5*time.Minute),
+		sig(1*time.Second),
+		sig(1*time.Hour),
+		sig(1*time.Minute),
+	)
+
+	fmt.Println(start.UTC(), time.Now().UTC())
 }
